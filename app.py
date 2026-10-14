@@ -7,7 +7,7 @@ from tkinter import filedialog, messagebox, ttk
 from pblite.catalog import load_mml, search_materials
 from pblite.exporter import export_used_materials
 from pblite.models import Gutter, Project, Run, SelectedMaterial
-from pblite.storage import load_project, save_project
+from pblite.storage import load_cached_catalog, load_project, save_cached_catalog, save_project
 from pblite.takeoff import material_total, used_materials
 
 
@@ -140,6 +140,7 @@ class PanelBuilderLite(tk.Tk):
         self.project, self.catalog, self.project_path = Project(), [], None
         self.vars = {key: tk.StringVar() for key in ("project_name", "address", "model", "electrician", "lender")}
         self._build_ui()
+        self.restore_cached_catalog()
 
     def _build_ui(self):
         toolbar = ttk.Frame(self, padding=8)
@@ -206,9 +207,22 @@ class PanelBuilderLite(tk.Tk):
         if not path: return
         try:
             self.catalog = load_mml(path)
-            self.catalog_label.config(text=f"MML: {len(self.catalog):,} materials")
+            if not self.catalog:
+                messagebox.showwarning("No materials found", "No catalog rows were found in that workbook.")
+                return
+            save_cached_catalog(self.catalog)
+            self.catalog_label.config(text=f"MML cached: {len(self.catalog):,} materials")
+            messagebox.showinfo("MML loaded", "The MML is now saved locally and will load automatically next time.")
         except Exception as error:
             messagebox.showerror("MML load failed", str(error))
+
+    def restore_cached_catalog(self):
+        try:
+            self.catalog = load_cached_catalog()
+        except Exception:
+            self.catalog = []
+        if self.catalog:
+            self.catalog_label.config(text=f"MML cached: {len(self.catalog):,} materials")
 
     def new_project(self):
         self.project, self.project_path = Project(), None
