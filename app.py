@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import tkinter as tk
+import webbrowser
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
@@ -77,6 +78,8 @@ class MaterialPicker(tk.Toplevel):
         ttk.Label(details, text="Quantity").pack(anchor="w")
         ttk.Spinbox(details, from_=0.01, to=99999, increment=1, textvariable=self.quantity_var, width=12).pack(anchor="w", pady=(4, 14))
         ttk.Label(details, text="For wire, use the number of individual conductors.\nRun length is calculated separately.", wraplength=245, foreground="#5f6368", justify="left").pack(anchor="w")
+        self.photo_button = ttk.Button(details, text="View Photo", command=self.open_photo, state="disabled")
+        self.photo_button.pack(anchor="w", pady=(16, 0))
 
         footer = ttk.Frame(self, padding=16)
         footer.pack(fill="x")
@@ -94,6 +97,7 @@ class MaterialPicker(tk.Toplevel):
 
     def refresh(self):
         self.tree.delete(*self.tree.get_children())
+        self.photo_button.config(state="disabled")
         self.filtered_items = []
         for item in search_materials(self.catalog, self.query.get(), self.kinds):
             if self.type_filter.get() != "All" and item.get("Type") != self.type_filter.get():
@@ -116,6 +120,15 @@ class MaterialPicker(tk.Toplevel):
         self.detail_description.config(text=item["Description"] or "No description")
         parts = [f"Type: {item['Type'] or '—'}", f"Size: {item['Size'] or '—'}", f"Color: {item['Color'] or '—'}", f"Unit price: ${item['Price']:,.2f}"]
         self.detail_meta.config(text="\n".join(parts))
+        self.photo_button.config(state="normal" if item.get("PhotoLink") else "disabled")
+
+    def open_photo(self):
+        selected = self.tree.selection()
+        if not selected:
+            return
+        link = self.filtered_items[int(selected[0])].get("PhotoLink", "").strip()
+        if link:
+            webbrowser.open_new_tab(link)
 
     def select(self):
         selected = self.tree.selection()

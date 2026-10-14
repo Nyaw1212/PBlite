@@ -29,4 +29,6 @@ The executable will be created in `dist\Panel Builder Lite.exe`.
 
 ## MML columns
 
-The app recognizes these column names: `CatalogNumber`, `Description`, `Price`, `InventoryCategory`, `Type`, `Size`, `Color`, `Supplier`, and `VendorCode`.
+The app recognizes these column names: `CatalogNumber`, `Description`, `Price`, `InventoryCategory`, `Type`, `Size`, `Color`, `Supplier`, `VendorCode`, and `Photo Link`.
+
+For online material photos, add a `Photo Link` (or `Image URL` / `Drive Link`) column. The Material Picker enables **View Photo** for that material and opens the link in your default browser. Share the Drive file with everyone who will use the app.

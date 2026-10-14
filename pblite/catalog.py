@@ -23,6 +23,13 @@ HEADER_ALIASES = {
     "color": "Color",
     "supplier": "Supplier",
     "vendorcode": "VendorCode",
+    "photo": "PhotoLink",
+    "photolink": "PhotoLink",
+    "photourl": "PhotoLink",
+    "image": "PhotoLink",
+    "imagelink": "PhotoLink",
+    "imageurl": "PhotoLink",
+    "drivelink": "PhotoLink",
 }
 
 
@@ -56,7 +63,7 @@ def load_mml(path: str | Path, sheet_name: str = "MML") -> list[dict[str, Any]]:
         item["Description"] = str(item.get("Description", "") or "").strip()
         item["Price"] = as_number(item.get("Price"))
         item["InventoryCategory"] = str(item.get("InventoryCategory", "VAN") or "VAN").strip().upper()
-        for key in ("Type", "Size", "Color", "Supplier", "VendorCode"):
+        for key in ("Type", "Size", "Color", "Supplier", "VendorCode", "PhotoLink"):
             item[key] = str(item.get(key, "") or "").strip()
         catalog.append(item)
     return catalog
