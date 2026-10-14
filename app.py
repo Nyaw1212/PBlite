@@ -15,34 +15,120 @@ class MaterialPicker(tk.Toplevel):
     def __init__(self, parent, catalog, title, kinds=()):
         super().__init__(parent)
         self.title(title)
-        self.geometry("900x500")
-        self.catalog, self.kinds, self.selection = catalog, kinds, None
+        self.geometry("1120x680")
+        self.minsize(900, 540)
+        self.catalog, self.kinds, self.selection, self.quantity = catalog, kinds, None, 1.0
         self.query = tk.StringVar()
+        self.type_filter = tk.StringVar(value="All")
+        self.size_filter = tk.StringVar(value="All")
+        self.color_filter = tk.StringVar(value="All")
+        self.quantity_var = tk.StringVar(value="1")
+        self.filtered_items = []
         self.query.trace_add("write", lambda *_: self.refresh())
-        ttk.Entry(self, textvariable=self.query).pack(fill="x", padx=10, pady=10)
+
+        header = ttk.Frame(self, padding=(16, 14, 16, 8))
+        header.pack(fill="x")
+        ttk.Label(header, text=title, font=("Segoe UI", 15, "bold")).pack(side="left")
+        ttk.Label(header, text="Search your loaded MML, then select a material and quantity.", foreground="#5f6368").pack(side="left", padx=14)
+
+        filters = ttk.LabelFrame(self, text="Find material", padding=10)
+        filters.pack(fill="x", padx=16, pady=(0, 8))
+        ttk.Label(filters, text="Search").grid(row=0, column=0, sticky="w")
+        search = ttk.Entry(filters, textvariable=self.query, width=42)
+        search.grid(row=1, column=0, sticky="ew", padx=(0, 10))
+        search.focus_set()
+        for column, label, variable, values in (
+            (1, "Type", self.type_filter, self._filter_values("Type")),
+            (2, "Size", self.size_filter, self._filter_values("Size")),
+            (3, "Color", self.color_filter, self._filter_values("Color")),
+        ):
+            ttk.Label(filters, text=label).grid(row=0, column=column, sticky="w")
+            combo = ttk.Combobox(filters, textvariable=variable, values=["All", *values], state="readonly", width=16)
+            combo.grid(row=1, column=column, sticky="ew", padx=(0, 10))
+            combo.bind("<<ComboboxSelected>>", lambda _event: self.refresh())
+        filters.columnconfigure(0, weight=1)
+
+        body = ttk.Frame(self, padding=(16, 0, 16, 0))
+        body.pack(fill="both", expand=True)
         columns = ("catalog", "description", "type", "size", "color", "price")
-        self.tree = ttk.Treeview(self, columns=columns, show="headings")
-        for column, label, width in (("catalog", "Catalog", 140), ("description", "Description", 400), ("type", "Type", 100), ("size", "Size", 70), ("color", "Color", 90), ("price", "Price", 90)):
+        table = ttk.Frame(body)
+        table.pack(side="left", fill="both", expand=True)
+        self.tree = ttk.Treeview(table, columns=columns, show="headings", selectmode="browse")
+        for column, label, width in (("catalog", "Catalog #", 145), ("description", "Description", 360), ("type", "Type", 95), ("size", "Size", 75), ("color", "Color", 95), ("price", "Price", 90)):
             self.tree.heading(column, text=label)
             self.tree.column(column, width=width, anchor="w")
-        self.tree.pack(fill="both", expand=True, padx=10, pady=5)
-        ttk.Button(self, text="Select", command=self.select).pack(pady=10)
+        scroll = ttk.Scrollbar(table, orient="vertical", command=self.tree.yview)
+        self.tree.configure(yscrollcommand=scroll.set)
+        self.tree.pack(side="left", fill="both", expand=True)
+        scroll.pack(side="right", fill="y")
+        self.tree.bind("<<TreeviewSelect>>", self.show_details)
         self.tree.bind("<Double-1>", lambda _event: self.select())
+
+        details = ttk.LabelFrame(body, text="Selected material", padding=14, width=280)
+        details.pack(side="right", fill="y", padx=(12, 0))
+        details.pack_propagate(False)
+        self.detail_catalog = ttk.Label(details, text="Choose a material", font=("Segoe UI", 12, "bold"), wraplength=245)
+        self.detail_catalog.pack(anchor="w", pady=(0, 10))
+        self.detail_description = ttk.Label(details, text="", wraplength=245, justify="left")
+        self.detail_description.pack(anchor="w", pady=(0, 14))
+        self.detail_meta = ttk.Label(details, text="", foreground="#5f6368", justify="left", wraplength=245)
+        self.detail_meta.pack(anchor="w")
+        ttk.Separator(details).pack(fill="x", pady=16)
+        ttk.Label(details, text="Quantity").pack(anchor="w")
+        ttk.Spinbox(details, from_=0.01, to=99999, increment=1, textvariable=self.quantity_var, width=12).pack(anchor="w", pady=(4, 14))
+        ttk.Label(details, text="For wire, use the number of individual conductors.\nRun length is calculated separately.", wraplength=245, foreground="#5f6368", justify="left").pack(anchor="w")
+
+        footer = ttk.Frame(self, padding=16)
+        footer.pack(fill="x")
+        self.result_label = ttk.Label(footer, text="0 materials")
+        self.result_label.pack(side="left")
+        ttk.Button(footer, text="Cancel", command=self.destroy).pack(side="right")
+        ttk.Button(footer, text="Add Material", command=self.select).pack(side="right", padx=(0, 8))
         self.refresh()
         self.transient(parent)
         self.grab_set()
 
+    def _filter_values(self, field):
+        allowed = search_materials(self.catalog, kinds=self.kinds)
+        return sorted({str(item.get(field, "")).strip() for item in allowed if str(item.get(field, "")).strip()}, key=str.lower)
+
     def refresh(self):
         self.tree.delete(*self.tree.get_children())
-        for index, item in enumerate(search_materials(self.catalog, self.query.get(), self.kinds)):
+        self.filtered_items = []
+        for item in search_materials(self.catalog, self.query.get(), self.kinds):
+            if self.type_filter.get() != "All" and item.get("Type") != self.type_filter.get():
+                continue
+            if self.size_filter.get() != "All" and item.get("Size") != self.size_filter.get():
+                continue
+            if self.color_filter.get() != "All" and item.get("Color") != self.color_filter.get():
+                continue
+            index = len(self.filtered_items)
+            self.filtered_items.append(item)
             self.tree.insert("", "end", iid=str(index), values=(item["CatalogNumber"], item["Description"], item["Type"], item["Size"], item["Color"], f"${item['Price']:,.2f}"))
+        self.result_label.config(text=f"{len(self.filtered_items):,} material{'s' if len(self.filtered_items) != 1 else ''}")
+
+    def show_details(self, _event=None):
+        selected = self.tree.selection()
+        if not selected:
+            return
+        item = self.filtered_items[int(selected[0])]
+        self.detail_catalog.config(text=item["CatalogNumber"])
+        self.detail_description.config(text=item["Description"] or "No description")
+        parts = [f"Type: {item['Type'] or '—'}", f"Size: {item['Size'] or '—'}", f"Color: {item['Color'] or '—'}", f"Unit price: ${item['Price']:,.2f}"]
+        self.detail_meta.config(text="\n".join(parts))
 
     def select(self):
         selected = self.tree.selection()
         if not selected:
             return
-        matches = search_materials(self.catalog, self.query.get(), self.kinds)
-        self.selection = matches[int(selected[0])]
+        try:
+            self.quantity = float(self.quantity_var.get())
+            if self.quantity <= 0:
+                raise ValueError
+        except ValueError:
+            messagebox.showerror("Invalid quantity", "Enter a quantity greater than zero.", parent=self)
+            return
+        self.selection = self.filtered_items[int(selected[0])]
         self.destroy()
 
 
@@ -157,7 +243,7 @@ class PanelBuilderLite(tk.Tk):
             return None
         picker = MaterialPicker(self, self.catalog, title, kinds)
         self.wait_window(picker)
-        return picker.selection
+        return (picker.selection, picker.quantity) if picker.selection else (None, 0)
 
     def add_run(self):
         run = Run(name=f"Run {len(self.project.runs) + 1}")
@@ -176,8 +262,8 @@ class PanelBuilderLite(tk.Tk):
         ttk.Label(dialog, text="Length (ft)").pack(anchor="w", padx=12, pady=(10, 0)); ttk.Entry(dialog, textvariable=length).pack(fill="x", padx=12)
         selected_label = ttk.Label(dialog, text=f"Conduit: {run.conduit.catalog_number if run.conduit else 'Not selected'}"); selected_label.pack(anchor="w", padx=12, pady=10)
         def select_conduit():
-            item = self.choose_material("Select Conduit", ("CONDUIT",))
-            if item: run.conduit = SelectedMaterial.from_catalog(item); selected_label.config(text=f"Conduit: {run.conduit.catalog_number}")
+            item, quantity = self.choose_material("Select Conduit", ("CONDUIT",))
+            if item: run.conduit = SelectedMaterial.from_catalog(item, quantity); selected_label.config(text=f"Conduit: {run.conduit.catalog_number}")
         ttk.Button(dialog, text="Select Conduit", command=select_conduit).pack(anchor="w", padx=12)
         lists = ttk.Frame(dialog); lists.pack(fill="both", expand=True, padx=12, pady=12)
         wires = tk.Listbox(lists); fittings = tk.Listbox(lists); wires.pack(side="left", fill="both", expand=True, padx=(0, 6)); fittings.pack(side="left", fill="both", expand=True)
@@ -186,11 +272,11 @@ class PanelBuilderLite(tk.Tk):
             for item in run.wires: wires.insert("end", f"{item.quantity:g} × {item.catalog_number} — {item.description}")
             for item in run.fittings: fittings.insert("end", f"{item.quantity:g} × {item.catalog_number} — {item.description}")
         def add_wire():
-            item = self.choose_material("Add Wire", ("WIRE",))
-            if item: run.wires.append(SelectedMaterial.from_catalog(item)); refresh_lists()
+            item, quantity = self.choose_material("Add Wire", ("WIRE",))
+            if item: run.wires.append(SelectedMaterial.from_catalog(item, quantity)); refresh_lists()
         def add_fitting():
-            item = self.choose_material("Add Fitting", ())
-            if item: run.fittings.append(SelectedMaterial.from_catalog(item)); refresh_lists()
+            item, quantity = self.choose_material("Add Fitting")
+            if item: run.fittings.append(SelectedMaterial.from_catalog(item, quantity)); refresh_lists()
         buttons = ttk.Frame(dialog); buttons.pack(fill="x", padx=12)
         ttk.Button(buttons, text="Add Wire", command=add_wire).pack(side="left")
         ttk.Button(buttons, text="Add Fitting", command=add_fitting).pack(side="left", padx=6)
